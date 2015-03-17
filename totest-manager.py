@@ -47,6 +47,12 @@ class ToTestBase(object):
     def iso_prefix(self):
         return self.project
 
+    def parent_project(self):
+        return self.parent_project
+
+    def arch(self):
+        return self.arch
+
     def binaries_of_product(self, project, product):
         url = self.api.makeurl(['build', project, 'images', 'local', product])
         try:
@@ -65,8 +71,8 @@ class ToTestBase(object):
         """Return the current snapshot in :ToTest"""
 
         # for now we hardcode all kind of things
-        for binary in self.binaries_of_product('openSUSE:%s:ToTest' % self.project, '_product:openSUSE-cd-mini-i586'):
-            result = re.match(r'openSUSE-%s-NET-i586-Snapshot(.*)-Media.iso' % self.iso_prefix(),
+        for binary in self.binaries_of_product('openSUSE:%s:ToTest' % self.project, '_product:openSUSE-cd-mini-%s' % self.arch):
+            result = re.match(r'openSUSE-%s-NET-%s-Snapshot(.*)-Media.iso' % self.iso_prefix() % self.arch,
                               binary)
             if result:
                 return result.group(1)
@@ -241,26 +247,30 @@ class ToTestBase(object):
 
         if not self.all_repos_done('openSUSE:%s' % self.project):
             return False
+        if self.arch == "x86_64":
+            for product in ['_product:openSUSE-ftp-ftp-i586_x86_64',
+                            '_product:openSUSE-Addon-NonOss-ftp-ftp-i586_x86_64'] + self.main_products:
+                if not self.package_ok('openSUSE:%s' % self.project, product, 'images', 'local'):
+                    return False
 
-        for product in ['_product:openSUSE-ftp-ftp-i586_x86_64',
-                        '_product:openSUSE-Addon-NonOss-ftp-ftp-i586_x86_64'] + self.main_products:
-            if not self.package_ok('openSUSE:%s' % self.project, product, 'images', 'local'):
+            if not self.all_repos_done('openSUSE:%s:Live' % self.project):
                 return False
 
-        if not self.all_repos_done('openSUSE:%s:Live' % self.project):
-            return False
+            for product in ['kiwi-image-livecd-kde.i586',
+                            'kiwi-image-livecd-gnome.i586',
+                            'kiwi-image-livecd-x11']:
+                if not self.package_ok('openSUSE:%s:Live' % self.project, product, 'standard', 'i586'):
+                    return False
 
-        for product in ['kiwi-image-livecd-kde.i586',
-                        'kiwi-image-livecd-gnome.i586',
-                        'kiwi-image-livecd-x11']:
-            if not self.package_ok('openSUSE:%s:Live' % self.project, product, 'standard', 'i586'):
-                return False
-
-        for product in ['kiwi-image-livecd-kde.x86_64',
-                        'kiwi-image-livecd-gnome.x86_64',
-                        'kiwi-image-livecd-x11']:
-            if not self.package_ok('openSUSE:%s:Live' % self.project, product, 'standard', 'x86_64'):
-                return False
+            for product in ['kiwi-image-livecd-kde.x86_64',
+                            'kiwi-image-livecd-gnome.x86_64',
+                            'kiwi-image-livecd-x11']:
+                if not self.package_ok('openSUSE:%s:Live' % self.project, product, 'standard', 'x86_64'):
+                    return False
+        elif self.arch == "ppc64le":
+            for product in ['_product:openSUSE-ftp-ftp-ppc_ppc64_ppc64le'] + self.main.products:
+                if not self.package_ok('openSUSE:%s' % self.project, product, 'images', 'local'):
+                    return False
 
         return True
 
@@ -279,17 +289,20 @@ class ToTestBase(object):
         print 'Updating snapshot %s' % snapshot
         self.api.switch_flag_in_prj('openSUSE:%s:ToTest' % self.project, flag='publish', state='disable')
 
-        self.release_package('openSUSE:%s' % self.project, '_product:openSUSE-ftp-ftp-i586_x86_64')
-        self.release_package('openSUSE:%s' % self.project, '_product:openSUSE-Addon-NonOss-ftp-ftp-i586_x86_64')
-        for cd in ['kiwi-image-livecd-kde.i586',
-                   'kiwi-image-livecd-kde.x86_64',
-                   'kiwi-image-livecd-gnome.i586',
-                   'kiwi-image-livecd-gnome.x86_64',
-                   'kiwi-image-livecd-x11']:
-            self.release_package('openSUSE:%s:Live' % self.project, cd, set_release='Snapshot%s' % snapshot)
+        if self.arch == "x86_64":
+            self.release_package('openSUSE:%s' % self.project, '_product:openSUSE-ftp-ftp-i586_x86_64')
+            self.release_package('openSUSE:%s' % self.project, '_product:openSUSE-Addon-NonOss-ftp-ftp-i586_x86_64')
+            for cd in ['kiwi-image-livecd-kde.i586',
+                       'kiwi-image-livecd-kde.x86_64',
+                       'kiwi-image-livecd-gnome.i586',
+                       'kiwi-image-livecd-gnome.x86_64',
+                       'kiwi-image-livecd-x11']:
+                self.release_package('openSUSE:%s:Live' % self.project, cd, set_release='Snapshot%s' % snapshot)
 
-        for cd in self.main_products:
-            self.release_package('openSUSE:%s' % self.project, cd, set_release='Snapshot%s' % snapshot)
+            for cd in self.main_products:
+                self.release_package('openSUSE:%s' % self.project, cd, set_release='Snapshot%s' % snapshot)
+        elif self.arch == "ppc64le":
+            self.release_package('openSUSE:%s' % self.project, '_product:openSUSE-ftp-ftp-ppc_ppc64_ppc64le')
 
     def publish_factory_totest(self):
         print 'Publish ToTest'
@@ -341,9 +354,9 @@ class ToTestBase(object):
         if can_release and not self.dryrun:
             self.update_totest(new_snapshot)
 
-    def known_failures_from_dashboard(self, project):
+    def known_failures_from_dashboard(self, parent_project):
         known_failures = []
-        url = self.api.makeurl(['source', 'openSUSE:%s:Staging' % self.project, 'dashboard', 'known_failures'])
+        url = self.api.makeurl(['source', 'openSUSE:%s:Staging' % self.parent_project, 'dashboard', 'known_failures'])
         f = self.api.retried_GET(url)
         for line in f:
             if not line[0] == '#':
@@ -365,6 +378,11 @@ class ToTestFactory(ToTestBase):
 
     def iso_prefix(self):
         return 'Tumbleweed'
+    def parent_project(self):
+        return 'Factory'
+
+    def arch(self):
+        return 'x86_64'
 
     # for Factory we check the version of the release package
     def current_version(self):
@@ -378,6 +396,40 @@ class ToTestFactory(ToTestBase):
             if result:
                 return result.group(1)
         raise Exception("can't find factory version")
+
+class ToTestFactoryPowerPC(ToTestBase):
+    main_products = ['_product:openSUSE-dvd5-BE-ppc64',
+                     '_product:openSUSE-dvd5-LE-ppc64le',
+                     '_product:openSUSE-cd-mini-ppc64',
+                     '_product:openSUSE-cd-mini-ppc64le']
+
+    def __init__(self, project, dryrun):
+        ToTestBase.__init__(self, project, dryrun)
+
+    def openqa_version(self):
+        return 'Tumbleweed'
+
+    def arch(self):
+        return 'ppc64le'
+
+    def parent_project(self):
+        return 'Factory'
+
+    def iso_prefix(self):
+        return 'Tumbleweed'
+
+    # for Factory we check the version of the release package
+    def current_version(self):
+        url = self.api.makeurl(['build', 'openSUSE:%s' % self.project, 'standard', 'ppc64le',
+                                '_product:openSUSE-release'])
+        f = self.api.retried_GET(url)
+        root = ET.parse(f).getroot()
+        for binary in root.findall('binary'):
+            binary = binary.get('filename', '')
+            result = re.match(r'.*-([^-]*)-[^-]*.src.rpm', binary)
+            if result:
+                return result.group(1)
+        raise Exception("can't find factory powerpc version")
 
 
 class ToTest132(ToTestBase):
@@ -412,6 +464,7 @@ if __name__ == '__main__':
 
     totest_class = {
         'Factory': ToTestFactory,
+        'Factory:PowerPC': ToTestFactoryPowerPC,
         '13.2': ToTest132,
     }
 
@@ -423,7 +476,7 @@ if __name__ == '__main__':
 
     osc.conf.get_config()
     Config('openSUSE:%s' % args.project)
-    # osc.conf.config['debug'] = True
+    osc.conf.config['debug'] = True
 
     totest = totest_class[args.project](args.project, args.dryrun)
     totest.totest()

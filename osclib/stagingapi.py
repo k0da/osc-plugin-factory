@@ -59,13 +59,20 @@ class StagingAPI(object):
 
         # If the project support rings, inititialize some variables.
         self.ring_packages = {}
-        if self.crings:
+        if self.crings and self.project == "openSUSE:Factory":
             self.rings = (
                 '{}:0-Bootstrap'.format(self.crings),
                 '{}:1-MinimalX'.format(self.crings),
                 '{}:2-TestDVD'.format(self.crings)
             )
-            self.ring_packages = self._generate_ring_packages()
+
+        self.packages_staged = self._get_staged_requests()
+
+        if self.crings and self.project == "openSUSE:Factory:PowerPC":
+            self.rings = (
+                '{}:0-Bootstrap'.format(self.crings),
+                '{}:1-MinimalX'.format(self.crings)
+            )
 
         self.packages_staged = self._get_staged_requests()
 
